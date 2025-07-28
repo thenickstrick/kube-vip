@@ -94,6 +94,7 @@ func New(configMap string, config *kubevip.Config) (*Manager, error) {
 	log.Info("using node name", "name", config.NodeName)
 
 	adminConfigPath := "/etc/kubernetes/admin.conf"
+	superAdminConfigPath := "/etc/kubernetes/super-admin.conf"
 	homeConfigPath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 
 	var clientset *kubernetes.Clientset
@@ -127,6 +128,30 @@ func New(configMap string, config *kubevip.Config) (*Manager, error) {
 			return nil, fmt.Errorf("could not create k8s clientset: %w", err)
 		}
 		log.Debug("Using external Kubernetes configuration from file", "path", adminConfigPath)
+	case utils.FileExists(superAdminConfigPath):
+		if config.KubernetesAddr != "" {
+			log.Info("k8s address", "address", config.KubernetesAddr)
+			clientConfig, err = k8s.NewRestConfig(superAdminConfigPath, false, config.KubernetesAddr)
+		} else if config.EnableControlPlane {
+			// If this is a control plane host it will likely have started as a static pod or won't have the
+			// VIP up before trying to connect to the API server, we set the API endpoint to this machine to
+			// ensure connectivity.
+			if config.DetectControlPlane {
+				clientConfig, err = k8s.FindWorkingKubernetesAddress(superAdminConfigPath, false)
+			} else {
+				// This will attempt to use kubernetes as the hostname (this should be passed as a host alias) in the pod manifest
+				clientConfig, err = k8s.NewRestConfig(superAdminConfigPath, false, fmt.Sprintf("kubernetes:%v", config.Port))
+			}
+		} else {
+			clientConfig, err = k8s.NewRestConfig(superAdminConfigPath, false, "")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("could not create k8s REST config from external file: %q: %w", superAdminConfigPath, err)
+		}
+		if clientset, err = k8s.NewClientset(clientConfig); err != nil {
+			return nil, fmt.Errorf("could not create k8s clientset: %w", err)
+		}
+		log.Debug("Using external Kubernetes configuration from file", "path", superAdminConfigPath)
 	case utils.FileExists(homeConfigPath):
 		clientConfig, err = k8s.NewRestConfig(homeConfigPath, false, "")
 		if err != nil {

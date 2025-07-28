@@ -27,6 +27,7 @@ func (e *Entry) Check() bool {
 	var config *rest.Config
 
 	adminConfigPath := "/etc/kubernetes/admin.conf"
+	superAdminConfigPath := "/etc/kubernetes/super-admin.conf"
 	// TODO: add one more switch case of homeConfigPath if there is such scenario in future
 	// homeConfigPath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 
@@ -42,6 +43,12 @@ func (e *Entry) Check() bool {
 		config, err = k8s.NewRestConfig(adminConfigPath, false, k8sAddr)
 		if err != nil {
 			log.Error("create k8s REST config", "path", adminConfigPath, "err", err)
+			return false
+		}
+	case utils.FileExists(superAdminConfigPath):
+		config, err = k8s.NewRestConfig(superAdminConfigPath, false, k8sAddr)
+		if err != nil {
+			log.Error("create k8s REST config", "path", superAdminConfigPath, "err", err)
 			return false
 		}
 	default:
